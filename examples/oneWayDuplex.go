@@ -49,8 +49,7 @@ func main() {
 	}
 
 	if answer.IsException() {
-		code, _ := answer.WantInt("code")
-		fmt.Println("Received error answer of quest. Code:", code)
+		fmt.Println("Received error answer of quest. Code:", answer.WantInt("code"))
 	} else {
 		fmt.Println("Received answer of quest.")
 	}

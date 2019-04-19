@@ -44,8 +44,8 @@ func main() {
 
 		if answer != nil {
 			if answer.IsException() {
-				code, _ := answer.WantInt("code")		//-- Fetch field with panic when type convert faild
-				ex, _ := answer.WantString("ex")		//-- Fetch field with panic when type convert faild
+				code := answer.WantInt("code")		//-- Fetch field with panic when type convert faild
+				ex := answer.WantString("ex")		//-- Fetch field with panic when type convert faild
 
 				fmt.Println("Receive error answer for quest", quest.Method(), answer, "error code:", code, "message:", ex)
 
@@ -94,7 +94,7 @@ func main() {
 
 		err := client.SendQuestWithLambda(quest, func(answer *fpnn.Answer, errorCode int) {
 			if errorCode == fpnn.FPNN_EC_OK {
-				value, _ := answer.WantInt("TEST")		//-- Fetch field with panic
+				value := answer.WantInt("TEST")		//-- Fetch field with panic
 				fmt.Println("Receive answer in lambda callback func. answer:", answer, "key 'TEST' is", value)
 			} else {
 				fmt.Println("Receive exception in lambda callback func. Answer:", answer, "error code:", errorCode)

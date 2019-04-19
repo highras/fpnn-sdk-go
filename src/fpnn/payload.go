@@ -256,86 +256,134 @@ func (payload *Payload) GetDict(key string) (value *Payload, ok bool) {
 
 //---------------------[ Want Methods ]----------------------------//
 
-func (payload *Payload) WantInt64(key string) (int64, bool) {
+func (payload *Payload) WantInt64(key string) int64 {
 	val, ok := payload.data[key]
-	return convertToInt64(val, true), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return convertToInt64(val, true)
 }
-func (payload *Payload) WantInt32(key string) (int32, bool) {
+func (payload *Payload) WantInt32(key string) int32 {
 	val, ok := payload.data[key]
-	return int32(convertToInt64(val, true)), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return int32(convertToInt64(val, true))
 }
-func (payload *Payload) WantInt16(key string) (int16, bool) {
+func (payload *Payload) WantInt16(key string) int16 {
 	val, ok := payload.data[key]
-	return int16(convertToInt64(val, true)), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return int16(convertToInt64(val, true))
 }
-func (payload *Payload) WantInt8(key string) (int8, bool) {
+func (payload *Payload) WantInt8(key string) int8 {
 	val, ok := payload.data[key]
-	return int8(convertToInt64(val, true)), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return int8(convertToInt64(val, true))
 }
-func (payload *Payload) WantInt(key string) (int, bool) {
+func (payload *Payload) WantInt(key string) int {
 	val, ok := payload.data[key]
-	return int(convertToInt64(val, true)), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return int(convertToInt64(val, true))
 }
 
-func (payload *Payload) WantUint64(key string) (uint64, bool) {
+func (payload *Payload) WantUint64(key string) uint64 {
 	val, ok := payload.data[key]
-	return convertToUint64(val, true), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return convertToUint64(val, true)
 }
-func (payload *Payload) WantUint32(key string) (uint32, bool) {
+func (payload *Payload) WantUint32(key string) uint32 {
 	val, ok := payload.data[key]
-	return uint32(convertToUint64(val, true)), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return uint32(convertToUint64(val, true))
 }
-func (payload *Payload) WantUint16(key string) (uint16, bool) {
+func (payload *Payload) WantUint16(key string) uint16 {
 	val, ok := payload.data[key]
-	return uint16(convertToUint64(val, true)), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return uint16(convertToUint64(val, true))
 }
-func (payload *Payload) WantUint8(key string) (uint8, bool) {
+func (payload *Payload) WantUint8(key string) uint8 {
 	val, ok := payload.data[key]
-	return uint8(convertToUint64(val, true)), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return uint8(convertToUint64(val, true))
 }
-func (payload *Payload) WantUint(key string) (uint, bool) {
+func (payload *Payload) WantUint(key string) uint {
 	val, ok := payload.data[key]
-	return uint(convertToUint64(val, true)), ok
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return uint(convertToUint64(val, true))
 }
 
-func (payload *Payload) WantString(key string) (string, bool) {
-	value, ok := payload.data[key]
-	return convertToString(value, true), ok
-}
-
-func (payload *Payload) WantBool(key string) (bool, bool) {
-	value, ok := payload.data[key]
-	return value.(bool), ok
-}
-
-func (payload *Payload) WantFloat32(key string) (float32, bool) {
-	val, ok := payload.data[key]
-	return float32(convertToFloat64(val, true)), ok
-}
-func (payload *Payload) WantFloat64(key string) (float64, bool) {
-	val, ok := payload.data[key]
-	return convertToFloat64(val, true), ok
-}
-
-func (payload *Payload) WantSlice(key string) ([]interface{}, bool) {
-	value, ok := payload.data[key]
-	return value.([]interface{}), ok
-}
-
-func (payload *Payload) WantMap(key string) (map[interface{}]interface{}, bool) {
-	value, ok := payload.data[key]
-	return value.(map[interface{}]interface{}), ok
-}
-
-func (payload *Payload) WantDict(key string) (*Payload, bool) {
+func (payload *Payload) WantString(key string) string {
 	value, ok := payload.data[key]
 	if !ok {
-		return nil, ok
+		panic("Key " + key + " is NOT found.")
+	}
+	return convertToString(value, true)
+}
+
+func (payload *Payload) WantBool(key string) bool {
+	value, ok := payload.data[key]
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return value.(bool)
+}
+
+func (payload *Payload) WantFloat32(key string) float32 {
+	val, ok := payload.data[key]
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return float32(convertToFloat64(val, true))
+}
+func (payload *Payload) WantFloat64(key string) float64 {
+	val, ok := payload.data[key]
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return convertToFloat64(val, true)
+}
+
+func (payload *Payload) WantSlice(key string) []interface{} {
+	value, ok := payload.data[key]
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return value.([]interface{})
+}
+
+func (payload *Payload) WantMap(key string) map[interface{}]interface{} {
+	value, ok := payload.data[key]
+	if !ok {
+		panic("Key " + key + " is NOT found.")
+	}
+	return value.(map[interface{}]interface{})
+}
+
+func (payload *Payload) WantDict(key string) *Payload {
+	value, ok := payload.data[key]
+	if !ok {
+		panic("Key " + key + " is NOT found.")
 	}
 
 	newDict := &Payload{}
 	newDict.data = value.(map[interface{}]interface{})
-	return newDict, ok
+	return newDict
 }
 
 //---------------------[ Other Method ]----------------------------//
