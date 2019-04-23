@@ -102,9 +102,11 @@ func (conn *tcpConnection) realConnect(endpoint string, timeout time.Duration) (
 		return false
 	}
 
+	conn.ticker = time.NewTicker(1 * time.Second)
+	
 	go conn.readLoop()
 	go conn.workLoop()
-	conn.ticker = time.NewTicker(1 * time.Second)
+	
 	conn.connected = true
 
 	runtime.SetFinalizer(conn, cleanTCPConnection)
