@@ -19,7 +19,7 @@ const (
 )
 
 const (
-	Version = 1
+	ProtoVersion = 1
 )
 
 const (

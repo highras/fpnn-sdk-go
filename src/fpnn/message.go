@@ -133,7 +133,7 @@ func (quest *Quest) Method() string {
 func (quest *Quest) Raw() ([]byte, error) {
 	var handle codec.Handle
 	header := [8]byte{
-		'F', 'P', 'N', 'N', Version,
+		'F', 'P', 'N', 'N', ProtoVersion,
 	}
 
 	if quest.isMsgPack {
@@ -269,7 +269,7 @@ func (answer *Answer) IsJson() bool {
 func (answer *Answer) Raw() ([]byte, error) {
 	var handle codec.Handle
 	header := [8]byte{
-		'F', 'P', 'N', 'N', Version,
+		'F', 'P', 'N', 'N', ProtoVersion,
 	}
 
 	if answer.isMsgPack {
