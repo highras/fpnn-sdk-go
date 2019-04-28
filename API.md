@@ -87,7 +87,7 @@ Please refer: [errorCodes.go](src/fpnn/errorCodes.go)
 
 参数：
 
-	+ **method**：服务器事件名称/服务器请求的方法名/服务器请求客户端的接口名称
++ **method**：服务器事件名称/服务器请求的方法名/服务器请求客户端的接口名称
 
 返回值：
 
@@ -98,9 +98,9 @@ Please refer: [errorCodes.go](src/fpnn/errorCodes.go)
 
 参考：
 
-	+ [oneWayDuplex.go](examples/oneWayDuplex.go)
-	+ [twoWayDuplex.go](examples/twoWayDuplex.go)
-	+ [rtmServerQuestProcessor.go](https://github.com/highras/rtm-server-sdk-go/blob/master/src/rtm/rtmServerQuestProcessor.go)
++ [oneWayDuplex.go](examples/oneWayDuplex.go)
++ [twoWayDuplex.go](examples/twoWayDuplex.go)
++ [rtmServerQuestProcessor.go](https://github.com/highras/rtm-server-sdk-go/blob/master/src/rtm/rtmServerQuestProcessor.go)
 
 
 ## type TCPClient
@@ -176,18 +176,18 @@ endpoint 例子：`endpoint := "localhost:8000"`
 
 可接受的参数为：
 
-	+ `pemKeyPath string`
++ `pemKeyPath string`
 
-		服务器公钥文件路径。PEM 格式。与 pemKeyData 参数互斥。
+	服务器公钥文件路径。PEM 格式。与 pemKeyData 参数互斥。
 
-	+ `pemKeyData []byte`
++ `pemKeyData []byte`
 
-		服务器公钥文件内容。PEM 格式。与 pemKeyPath 参数互斥。
+	服务器公钥文件内容。PEM 格式。与 pemKeyPath 参数互斥。
 
-	+ `reinforce bool`
++ `reinforce bool`
 
-		true 采用 256 位密钥加密，false 采用 128 位密钥加密。  
-		默认为 true
+	true 采用 256 位密钥加密，false 采用 128 位密钥加密。  
+	默认为 true
 
 ### func (client *TCPClient) IsConnected() bool
 
