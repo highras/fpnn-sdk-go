@@ -391,7 +391,7 @@ func (conn *tcpConnection) workLoop() {
 			}
 
 		case <-conn.ticker.C:
-			conn.cleanTimeoutedCallback()
+			go conn.cleanTimeoutedCallback()
 
 		case <-conn.closeSignChan:
 			return
@@ -561,10 +561,10 @@ func (conn *tcpConnection) close() {
 		}
 
 		conn.ticker.Stop()
-		conn.closeSignChan <- true
 		conn.connected = false
 
 		conn.mutex.Unlock()
+		conn.closeSignChan <- true
 		conn.cleanCallbackMap()
 
 		if conn.onClosed != nil {

@@ -159,6 +159,8 @@ func (tester *Tester) showStatistics() {
 
 func main() {
 
+	fmt.Println("Current SDK version:", fpnn.SDKVersion)
+
 	if len(os.Args) != 5 {
 		fmt.Println("Usage:", os.Args[0], "ip", "port", "connections", "total-qps")
 		return

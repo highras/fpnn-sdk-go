@@ -142,6 +142,8 @@ func test(client *fpnn.TCPClient, threadCount int, questCount int) {
 
 func main() {
 
+	fmt.Println("Current SDK version:", fpnn.SDKVersion)
+	
 	if len(os.Args) != 3 {
 		fmt.Println("Usage:", os.Args[0], "ip", "port")
 		return
