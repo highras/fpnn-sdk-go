@@ -207,9 +207,9 @@ endpoint 例子：`endpoint := "localhost:8000"`
 
 连接目标服务器。(FPNN 风格接口)
 
-### func (client *TCPClient) Dail() bool
+### func (client *TCPClient) Dial() bool
 
-	func (client *TCPClient) Dail() bool
+	func (client *TCPClient) Dial() bool
 
 连接目标服务器。(Go 风格接口)
 

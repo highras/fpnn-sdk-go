@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	SDKVersion = "1.0.1"
+	SDKVersion = "1.0.2"
 )
 
 type AnswerCallback interface {
@@ -166,7 +166,7 @@ func (client *TCPClient) Connect() bool {
 	return ok
 }
 
-func (client *TCPClient) Dail() bool {
+func (client *TCPClient) Dial() bool {
 	return client.Connect()
 }
 
