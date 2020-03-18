@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync/atomic"
-	"../src/fpnn"
+	"github.com/highras/fpnn-sdk-go/src/fpnn"
 )
 
 type Tester struct {

@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 	"runtime"
-	"../src/fpnn"
+	"github.com/highras/fpnn-sdk-go/src/fpnn"
 )
 
 func main() {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"../src/fpnn"
+	"github.com/highras/fpnn-sdk-go/src/fpnn"
 )
 
 type DemoQuestPeocessor struct {}
