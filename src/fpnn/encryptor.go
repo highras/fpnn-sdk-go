@@ -1,33 +1,29 @@
 package fpnn
 
-/*
-#include <stdlib.h>
-#include "aes/aesBridge.c"
-#include "aes/rijndael.c"
-#include "micro-ecc/uECC.c"
-*/
-import "C"
-
 import (
-	"fmt"
-	"errors"
-	"unsafe"
-	"runtime"
-	"io/ioutil"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/md5"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
-	"crypto/sha256"
-	"crypto/md5"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"math/big"
 )
 
 var (
 	oidPublicKeyECC = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
 
 	oidNamedCurve224r1 = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
-	oidNamedCurve192r1 = asn1.ObjectIdentifier{1,2,840,10045,3,1,1}
-	oidNamedCurve256r1 = asn1.ObjectIdentifier{1,2,840,10045,3,1,7}
-	oidNamedCurve256k1 = asn1.ObjectIdentifier{1,3,132,0,10}
+	oidNamedCurve192r1 = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 1}
+	oidNamedCurve256r1 = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}
+	oidNamedCurve256k1 = asn1.ObjectIdentifier{1, 3, 132, 0, 10}
 )
 
 type pemKeyInfo struct {
@@ -37,12 +33,12 @@ type pemKeyInfo struct {
 }
 
 type eccPublicKeyInfo struct {
-	publicKey	[]byte
-	curveName	string
-	keyLen		int
+	publicKey []byte
+	curveName string
+	keyLen    int
 }
 
-func praseCurveName(rawInfo *pemKeyInfo, keyInfo *eccPublicKeyInfo) error {
+func parseCurveName(rawInfo *pemKeyInfo, keyInfo *eccPublicKeyInfo) error {
 
 	paramsData := rawInfo.Algorithm.Parameters.FullBytes
 	namedCurveOID := new(asn1.ObjectIdentifier)
@@ -59,16 +55,16 @@ func praseCurveName(rawInfo *pemKeyInfo, keyInfo *eccPublicKeyInfo) error {
 	switch {
 	case oid.Equal(oidNamedCurve224r1):
 		keyInfo.curveName = "secp224r1"
-		keyInfo.keyLen = 28 * 2;
+		keyInfo.keyLen = 28 * 2
 	case oid.Equal(oidNamedCurve192r1):
 		keyInfo.curveName = "secp192r1"
-		keyInfo.keyLen = 24 * 2;
+		keyInfo.keyLen = 24 * 2
 	case oid.Equal(oidNamedCurve256r1):
 		keyInfo.curveName = "secp256r1"
-		keyInfo.keyLen = 32 * 2;
+		keyInfo.keyLen = 32 * 2
 	case oid.Equal(oidNamedCurve256k1):
 		keyInfo.curveName = "secp256k1"
-		keyInfo.keyLen = 32 * 2;
+		keyInfo.keyLen = 32 * 2
 	default:
 		return errors.New("Unsupported ECC curve.")
 	}
@@ -103,7 +99,7 @@ func extraEccPublicKeyFromPemData(rawPemData []byte) (*eccPublicKeyInfo, error) 
 	}
 
 	eccKeyInfo := &eccPublicKeyInfo{}
-	err = praseCurveName(&pemKeyInfo, eccKeyInfo)
+	err = parseCurveName(&pemKeyInfo, eccKeyInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -118,55 +114,48 @@ func extraEccPublicKeyFromPemData(rawPemData []byte) (*eccPublicKeyInfo, error) 
 }
 
 type ecdhInfo struct {
-	secret		[]byte
-	publicKey	[]byte
-	privateKey	[]byte
+	secret     []byte
+	publicKey  []byte
+	privateKey []byte
 }
 
 func makeEcdhInfo(serverKeyInfo *eccPublicKeyInfo) (*ecdhInfo, error) {
-	
-	var curve C.uECC_Curve
-
+	var curve elliptic.Curve
 	switch serverKeyInfo.curveName {
-	case "secp192r1":
-		curve, _ = C.uECC_secp192r1()
 	case "secp224r1":
-		curve, _ = C.uECC_secp224r1()
+		curve = elliptic.P224()
 	case "secp256r1":
-		curve, _ = C.uECC_secp256r1()
-	case "secp256k1":
-		curve, _ = C.uECC_secp256k1()
+		curve = elliptic.P256()
 	default:
 		return nil, fmt.Errorf("Unsupported ECC curve: %s", serverKeyInfo.curveName)
 	}
+	priv, err := ecdsa.GenerateKey(curve, rand.Reader)
+	if err != nil {
+		fmt.Printf("Failed to generate Alice's private key pair: %s\n", err)
+	}
+
+	pub := priv.PublicKey
+	x := new(big.Int).SetBytes(serverKeyInfo.publicKey[0:32])
+	y := new(big.Int).SetBytes(serverKeyInfo.publicKey[32:])
+
+	secret, _ := pub.Curve.ScalarMult(x, y, priv.D.Bytes())
 
 	info := &ecdhInfo{}
-	info.secret = make([]byte, 32)
-	info.publicKey = make([]byte, 64)
-	info.privateKey = make([]byte, 32)
-
-	rev, _ := C.uECC_make_key((*C.uchar)(unsafe.Pointer(&info.publicKey[0])), (*C.uchar)(unsafe.Pointer(&info.privateKey[0])), curve)
-	if rev == 0 {
-		return nil, fmt.Errorf("Generate ECC key pair failed, uECC_make_key() failed.")
-	}
-
-	rev, _ = C.uECC_shared_secret((*C.uchar)(unsafe.Pointer(&serverKeyInfo.publicKey[0])),
-		(*C.uchar)(unsafe.Pointer(&info.privateKey[0])), (*C.uchar)(unsafe.Pointer(&info.secret[0])), curve)
-	if rev == 0 {
-		return nil, fmt.Errorf("Generate ECC shared secret failed, uECC_shared_secret() failed.")
-	}
+	info.secret = secret.Bytes()
+	xy := make([]byte, 64)
+	copy(xy, append(pub.X.Bytes(), pub.Y.Bytes()...))
+	info.publicKey = xy
+	info.privateKey = priv.D.Bytes()
 
 	return info, nil
 }
 
 type encryptor struct {
-	aesCtx		unsafe.Pointer
-	goPos		uint64
-	iv			[]byte
+	stream cipher.Stream
+	iv     []byte
 }
 
-func newEncryptor(secret []byte, bits int) *encryptor {
-
+func newEncryptor(secret []byte, bits int, encrypt bool) *encryptor {
 	var key []byte
 
 	if bits == 256 {
@@ -184,52 +173,32 @@ func newEncryptor(secret []byte, bits int) *encryptor {
 	}
 
 	enc := &encryptor{}
-	enc.goPos = 0
 	enc.iv = make([]byte, 16)
-	
-	aesCtx, _ := C.mallocAESCtx()
-	C.rijndael_setup_encrypt(aesCtx, (*C.uchar)(unsafe.Pointer(&key[0])), C.size_t(len(key)))
 
 	rawIv := md5.Sum(secret)
 	copy(enc.iv, rawIv[:])
-	enc.aesCtx = unsafe.Pointer(aesCtx)
 
-	runtime.SetFinalizer(enc, closeEncryptor)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+	var stream cipher.Stream
+	if encrypt {
+		stream = cipher.NewCFBEncrypter(block, enc.iv)
+	} else {
+		stream = cipher.NewCFBDecrypter(block, enc.iv)
+	}
+
+	enc.stream = stream
 	return enc
 }
 
-func closeEncryptor(enc *encryptor) {
-	C.free(enc.aesCtx)
-}
-
 func (enc *encryptor) encrypt(data []byte) []byte {
-
-	srclen := len(data)
-	encBuf := make([]byte, srclen)
-	aesCtx := C.ctxPtr(enc.aesCtx)
-
-	pos := (C.size_t)(enc.goPos)
-	C.rijndael_cfb_encrypt(aesCtx, true, (*C.uchar)(unsafe.Pointer(&data[0])),
-		(*C.uchar)(unsafe.Pointer(&encBuf[0])), C.size_t(srclen),
-		(*C.uchar)(unsafe.Pointer(&enc.iv[0])), (*C.size_t)(unsafe.Pointer(&pos)))
-
-	enc.goPos = uint64(pos)
-	
-	return encBuf
+	enc.stream.XORKeyStream(data, data)
+	return data
 }
 
 func (dec *encryptor) decrypt(data []byte) []byte {
-	
-	srclen := len(data)
-	decBuf := make([]byte, srclen)
-	aesCtx := C.ctxPtr(dec.aesCtx)
-
-	pos := (C.size_t)(dec.goPos)
-	C.rijndael_cfb_encrypt(aesCtx, false, (*C.uchar)(unsafe.Pointer(&data[0])),
-		(*C.uchar)(unsafe.Pointer(&decBuf[0])), C.size_t(srclen),
-		(*C.uchar)(unsafe.Pointer(&dec.iv[0])), (*C.size_t)(unsafe.Pointer(&pos)))
-
-	dec.goPos = uint64(pos)
-	
-	return decBuf
+	dec.stream.XORKeyStream(data, data)
+	return data
 }

@@ -1,22 +1,22 @@
 package fpnn
 
 import (
-	"log"
-	"io"
+	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net"
+	"runtime"
 	"sync"
 	"time"
-	"runtime"
-	"bytes"
-	"errors"
 	"unsafe"
-	"encoding/binary"
 )
 
 type rawData struct {
-	header		[]byte
-	body		[]byte
+	header []byte
+	body   []byte
 }
 
 func newRawData() *rawData {
@@ -26,32 +26,32 @@ func newRawData() *rawData {
 }
 
 type connCallback struct {
-	timeout			int64
-	callback		AnswerCallback
-	callbackFunc 	func(answer *Answer, errorCode int)
+	timeout      int64
+	callback     AnswerCallback
+	callbackFunc func(answer *Answer, errorCode int)
 }
 
 type encryptionInfo struct {
-	aesKeyBits		int
-	secret			[]byte
-	eccPublicKey	[]byte
+	aesKeyBits   int
+	secret       []byte
+	eccPublicKey []byte
 }
 
 type tcpConnection struct {
-	mutex			sync.Mutex
-	answerMap		map[uint32]*connCallback
-	conn			net.Conn
-	seqNum			uint32
-	closeSignChan	chan bool
-	writeChan		chan []byte
-	ticker			*time.Ticker
-	connected		bool
-	logger			*log.Logger
-	onConnected		func(connId uint64)
-	onClosed		func(connId uint64)
-	questProcessor	QuestProcessor
-	activeClosed	bool
-	encryptInfo		*encryptionInfo
+	mutex          sync.Mutex
+	answerMap      map[uint32]*connCallback
+	conn           net.Conn
+	seqNum         uint32
+	closeSignChan  chan bool
+	writeChan      chan []byte
+	ticker         *time.Ticker
+	connected      bool
+	logger         *log.Logger
+	onConnected    func(connId uint64)
+	onClosed       func(connId uint64)
+	questProcessor QuestProcessor
+	activeClosed   bool
+	encryptInfo    *encryptionInfo
 }
 
 func newTCPConnection(logger *log.Logger, onConnected func(connId uint64), onClosed func(connId uint64),
@@ -66,7 +66,7 @@ func newTCPConnection(logger *log.Logger, onConnected func(connId uint64), onClo
 	conn.seqNum = uint32(now.UnixNano() & 0xFFF)
 
 	conn.connected = false
-	if (logger != nil) {
+	if logger != nil {
 		conn.logger = logger
 	} else {
 		conn.logger = Config.logger
@@ -77,7 +77,7 @@ func newTCPConnection(logger *log.Logger, onConnected func(connId uint64), onClo
 
 	conn.questProcessor = questProcessor
 	conn.activeClosed = false
-	
+
 	return conn
 }
 
@@ -93,7 +93,7 @@ func cleanTCPConnection(conn *tcpConnection) {
 }
 
 func (conn *tcpConnection) enableEncryptor(aesBits int, serverKey *eccPublicKeyInfo) bool {
-	
+
 	info, err := makeEcdhInfo(serverKey)
 	if err != nil {
 		conn.logger.Printf("[ERROR] Make ecdh info error, err: %v", err)
@@ -118,7 +118,7 @@ func (conn *tcpConnection) realConnect(endpoint string, timeout time.Duration) (
 		return true
 	}
 
-	conn.conn, err = net.DialTimeout("tcp", endpoint, timeout);
+	conn.conn, err = net.DialTimeout("tcp", endpoint, timeout)
 	if err != nil {
 		conn.connected = false
 		conn.logger.Printf("[ERROR] Connect to %s failed, err: %v", endpoint, err)
@@ -129,7 +129,7 @@ func (conn *tcpConnection) realConnect(endpoint string, timeout time.Duration) (
 
 	go conn.readLoop()
 	go conn.workLoop()
-	
+
 	conn.connected = true
 
 	runtime.SetFinalizer(conn, cleanTCPConnection)
@@ -165,14 +165,14 @@ func (conn *tcpConnection) readRawData(decoder *encryptor) *rawData {
 	}
 
 	if decoder != nil {
-		decHeader := decoder.decrypt(buffer.header)
-		buffer.header = decHeader
+		decBufHeader := decoder.decrypt(buffer.header)
+		buffer.header = decBufHeader
 	}
 
 	var payloadSize uint32
 	headReader := bytes.NewReader(buffer.header[8:])
 	binary.Read(headReader, binary.LittleEndian, &payloadSize)
-	
+
 	if payloadSize > uint32(Config.maxPayloadSize) {
 		conn.logger.Printf("[ERROR] Read huge payload, size: %d", payloadSize)
 		return nil
@@ -180,11 +180,11 @@ func (conn *tcpConnection) readRawData(decoder *encryptor) *rawData {
 
 	switch buffer.header[6] {
 	case MessageTypeOneWay:
-		buffer.body = make([]byte, payloadSize + uint32(buffer.header[7]))
+		buffer.body = make([]byte, payloadSize+uint32(buffer.header[7]))
 	case MessageTypeTwoWay:
-		buffer.body = make([]byte, payloadSize + 4 + uint32(buffer.header[7]))
+		buffer.body = make([]byte, payloadSize+4+uint32(buffer.header[7]))
 	case MessageTypeAnswer:
-		buffer.body = make([]byte, payloadSize + 4)
+		buffer.body = make([]byte, payloadSize+4)
 	default:
 		conn.logger.Printf("[ERROR] Receive invalid FPNN MType: %d", buffer.header[6])
 		return nil
@@ -199,8 +199,8 @@ func (conn *tcpConnection) readRawData(decoder *encryptor) *rawData {
 	}
 
 	if decoder != nil {
-		decBody := decoder.decrypt(buffer.body)
-		buffer.body = decBody
+		decBufBody := decoder.decrypt(buffer.body)
+		buffer.body = decBufBody
 	}
 
 	return buffer
@@ -216,7 +216,7 @@ func (conn *tcpConnection) processRawData(data *rawData) bool {
 			conn.logger.Printf("[ERROR] Decode quest failed, err: %v", err)
 			return false
 		}
-		
+
 		conn.dealQuest(quest)
 
 	case MessageTypeAnswer:
@@ -282,7 +282,7 @@ func (conn *tcpConnection) dealQuest(quest *Quest) {
 				conn.logger.Printf("[ERROR] Received twoway quest, but quest processor is nil. Method: %s. Send default answer error, err: %v",
 					quest.method, err)
 			}
-			
+
 		} else {
 			conn.logger.Printf("[ERROR] Received oneway quest, but quest processor is nil. Method: %s.", quest.method)
 		}
@@ -302,7 +302,6 @@ func (conn *tcpConnection) realDealQuest(quest *Quest) {
 				conn.logger.Printf("[ERROR] Received twoway quest, but method function is unconfiged. Method: %s. Send default answer error, err: %v",
 					quest.method, err)
 			}
-			
 		} else {
 			conn.logger.Printf("[ERROR] Received oneway quest, but method function is unconfiged. Method: %s.", quest.method)
 		}
@@ -333,7 +332,7 @@ func (conn *tcpConnection) realDealQuest(quest *Quest) {
 			if err != nil {
 				ex = fmt.Sprintf("Client error: %v", err)
 			}
-			
+
 			answer = NewErrorAnswer(quest, FPNN_EC_CORE_UNKNOWN_ERROR, ex)
 
 			if sendErr := conn.sendAnswer(answer); sendErr != nil {
@@ -350,7 +349,7 @@ func (conn *tcpConnection) readLoop() {
 
 	var decoder *encryptor
 	if conn.encryptInfo != nil {
-		decoder = newEncryptor(conn.encryptInfo.secret, conn.encryptInfo.aesKeyBits)
+		decoder = newEncryptor(conn.encryptInfo.secret, conn.encryptInfo.aesKeyBits, false)
 	}
 
 	for {
@@ -375,16 +374,14 @@ func (conn *tcpConnection) workLoop() {
 		conn.close()
 		return
 	}
-
 	for {
 		select {
 		case binData := <-conn.writeChan:
-
 			if encoder != nil {
 				encBinary := encoder.encrypt(binData)
 				binData = encBinary
 			}
-			
+
 			if _, err := conn.conn.Write(binData); err != nil {
 				conn.logger.Printf("[ERROR] Write data to connection failed, err: %v", err)
 				go conn.close()
@@ -411,7 +408,7 @@ func (conn *tcpConnection) prepareEncryptedConnection() (*encryptor, error) {
 			return nil, err
 		}
 
-		encoder := newEncryptor(conn.encryptInfo.secret, conn.encryptInfo.aesKeyBits)
+		encoder := newEncryptor(conn.encryptInfo.secret, conn.encryptInfo.aesKeyBits, true)
 		return encoder, nil
 	} else {
 		return nil, nil
@@ -466,7 +463,7 @@ func (conn *tcpConnection) prepareECDHQuest() ([]byte, error) {
 	quest.Param("streamMode", true)
 
 	callback := &connCallback{}
-	callback.timeout = time.Now().Unix() + int64(Config.questTimeout / time.Second)
+	callback.timeout = time.Now().Unix() + int64(Config.questTimeout/time.Second)
 	callback.callbackFunc = func(answer *Answer, errorCode int) {
 		if errorCode != FPNN_EC_OK {
 			conn.logger.Printf("[ERROR] Encryption handshake failed, errorCode: %d", errorCode)
@@ -527,7 +524,7 @@ func (conn *tcpConnection) sendQuest(quest *Quest, callback *connCallback) error
 }
 
 func (conn *tcpConnection) sendAnswer(answer *Answer) error {
-	
+
 	binData, err := answer.Raw()
 	if err != nil {
 		return err
