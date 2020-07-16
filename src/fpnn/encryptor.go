@@ -15,13 +15,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"github.com/fomichev/secp256k1"
 )
 
 var (
 	oidPublicKeyECC = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
 
 	oidNamedCurve224r1 = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
-	oidNamedCurve192r1 = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 1}
 	oidNamedCurve256r1 = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}
 	oidNamedCurve256k1 = asn1.ObjectIdentifier{1, 3, 132, 0, 10}
 )
@@ -56,9 +56,6 @@ func parseCurveName(rawInfo *pemKeyInfo, keyInfo *eccPublicKeyInfo) error {
 	case oid.Equal(oidNamedCurve224r1):
 		keyInfo.curveName = "secp224r1"
 		keyInfo.keyLen = 28 * 2
-	case oid.Equal(oidNamedCurve192r1):
-		keyInfo.curveName = "secp192r1"
-		keyInfo.keyLen = 24 * 2
 	case oid.Equal(oidNamedCurve256r1):
 		keyInfo.curveName = "secp256r1"
 		keyInfo.keyLen = 32 * 2
@@ -126,6 +123,8 @@ func makeEcdhInfo(serverKeyInfo *eccPublicKeyInfo) (*ecdhInfo, error) {
 		curve = elliptic.P224()
 	case "secp256r1":
 		curve = elliptic.P256()
+	case "secp256k1":
+		curve = secp256k1.SECP256K1()
 	default:
 		return nil, fmt.Errorf("Unsupported ECC curve: %s", serverKeyInfo.curveName)
 	}
