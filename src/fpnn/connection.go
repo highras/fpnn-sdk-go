@@ -47,14 +47,14 @@ type tcpConnection struct {
 	ticker			*time.Ticker
 	connected		bool
 	logger			*log.Logger
-	onConnected		func(connId uint64)
-	onClosed		func(connId uint64)
+	onConnected		tcpClientConnectedCallback
+	onClosed		tcpClientCloseCallback
 	questProcessor	QuestProcessor
 	activeClosed	bool
 	encryptInfo		*encryptionInfo
 }
 
-func newTCPConnection(logger *log.Logger, onConnected func(connId uint64), onClosed func(connId uint64),
+func newTCPConnection(logger *log.Logger, onConnected tcpClientConnectedCallback, onClosed tcpClientCloseCallback,
 	questProcessor QuestProcessor) *tcpConnection {
 
 	conn := new(tcpConnection)
@@ -66,7 +66,7 @@ func newTCPConnection(logger *log.Logger, onConnected func(connId uint64), onClo
 	conn.seqNum = uint32(now.UnixNano() & 0xFFF)
 
 	conn.connected = false
-	if (logger != nil) {
+	if logger != nil {
 		conn.logger = logger
 	} else {
 		conn.logger = Config.logger
@@ -77,7 +77,7 @@ func newTCPConnection(logger *log.Logger, onConnected func(connId uint64), onClo
 
 	conn.questProcessor = questProcessor
 	conn.activeClosed = false
-	
+
 	return conn
 }
 
@@ -93,7 +93,7 @@ func cleanTCPConnection(conn *tcpConnection) {
 }
 
 func (conn *tcpConnection) enableEncryptor(aesBits int, serverKey *eccPublicKeyInfo) bool {
-	
+
 	info, err := makeEcdhInfo(serverKey)
 	if err != nil {
 		conn.logger.Printf("[ERROR] Make ecdh info error, err: %v", err)
@@ -118,7 +118,7 @@ func (conn *tcpConnection) realConnect(endpoint string, timeout time.Duration) (
 		return true
 	}
 
-	conn.conn, err = net.DialTimeout("tcp", endpoint, timeout);
+	conn.conn, err = net.DialTimeout("tcp", endpoint, timeout)
 	if err != nil {
 		conn.connected = false
 		conn.logger.Printf("[ERROR] Connect to %s failed, err: %v", endpoint, err)
@@ -129,7 +129,7 @@ func (conn *tcpConnection) realConnect(endpoint string, timeout time.Duration) (
 
 	go conn.readLoop()
 	go conn.workLoop()
-	
+
 	conn.connected = true
 
 	runtime.SetFinalizer(conn, cleanTCPConnection)
@@ -137,14 +137,16 @@ func (conn *tcpConnection) realConnect(endpoint string, timeout time.Duration) (
 }
 
 func (conn *tcpConnection) connect(endpoint string, timeout time.Duration) (ok bool) {
-	if conn.realConnect(endpoint, timeout) {
-		if conn.onConnected != nil {
+	ok = conn.realConnect(endpoint, timeout)
+	if conn.onConnected != nil {
+		if ok {
 			var addr uintptr = uintptr(unsafe.Pointer(conn))
-			conn.onConnected(uint64(addr))
+			go conn.onConnected(uint64(addr), endpoint, ok)
+		} else {
+			go conn.onConnected(0, endpoint, ok)
 		}
-		return true
 	}
-	return false
+	return
 }
 
 func (conn *tcpConnection) readRawData(decoder *encryptor) *rawData {
@@ -172,7 +174,7 @@ func (conn *tcpConnection) readRawData(decoder *encryptor) *rawData {
 	var payloadSize uint32
 	headReader := bytes.NewReader(buffer.header[8:])
 	binary.Read(headReader, binary.LittleEndian, &payloadSize)
-	
+
 	if payloadSize > uint32(Config.maxPayloadSize) {
 		conn.logger.Printf("[ERROR] Read huge payload, size: %d", payloadSize)
 		return nil
@@ -216,7 +218,7 @@ func (conn *tcpConnection) processRawData(data *rawData) bool {
 			conn.logger.Printf("[ERROR] Decode quest failed, err: %v", err)
 			return false
 		}
-		
+
 		conn.dealQuest(quest)
 
 	case MessageTypeAnswer:
@@ -282,7 +284,7 @@ func (conn *tcpConnection) dealQuest(quest *Quest) {
 				conn.logger.Printf("[ERROR] Received twoway quest, but quest processor is nil. Method: %s. Send default answer error, err: %v",
 					quest.method, err)
 			}
-			
+
 		} else {
 			conn.logger.Printf("[ERROR] Received oneway quest, but quest processor is nil. Method: %s.", quest.method)
 		}
@@ -302,7 +304,7 @@ func (conn *tcpConnection) realDealQuest(quest *Quest) {
 				conn.logger.Printf("[ERROR] Received twoway quest, but method function is unconfiged. Method: %s. Send default answer error, err: %v",
 					quest.method, err)
 			}
-			
+
 		} else {
 			conn.logger.Printf("[ERROR] Received oneway quest, but method function is unconfiged. Method: %s.", quest.method)
 		}
@@ -333,7 +335,7 @@ func (conn *tcpConnection) realDealQuest(quest *Quest) {
 			if err != nil {
 				ex = fmt.Sprintf("Client error: %v", err)
 			}
-			
+
 			answer = NewErrorAnswer(quest, FPNN_EC_CORE_UNKNOWN_ERROR, ex)
 
 			if sendErr := conn.sendAnswer(answer); sendErr != nil {
@@ -384,7 +386,7 @@ func (conn *tcpConnection) workLoop() {
 				encBinary := encoder.encrypt(binData)
 				binData = encBinary
 			}
-			
+
 			if _, err := conn.conn.Write(binData); err != nil {
 				conn.logger.Printf("[ERROR] Write data to connection failed, err: %v", err)
 				go conn.close()
@@ -527,7 +529,7 @@ func (conn *tcpConnection) sendQuest(quest *Quest, callback *connCallback) error
 }
 
 func (conn *tcpConnection) sendAnswer(answer *Answer) error {
-	
+
 	binData, err := answer.Raw()
 	if err != nil {
 		return err
@@ -552,7 +554,7 @@ func (conn *tcpConnection) close() {
 	defer conn.mutex.Unlock()
 
 	if conn.connected {
-
+		endpoint := conn.conn.RemoteAddr().String()
 		conn.activeClosed = true
 		err := conn.conn.Close()
 		if err != nil {
@@ -569,7 +571,7 @@ func (conn *tcpConnection) close() {
 
 		if conn.onClosed != nil {
 			var addr uintptr = uintptr(unsafe.Pointer(conn))
-			go conn.onClosed(uint64(addr))
+			go conn.onClosed(uint64(addr), endpoint)
 		}
 		conn.mutex.Lock()
 	}

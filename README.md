@@ -43,8 +43,8 @@ e.g. `"localhost:8000"`
 
 * Set connection events' callbacks
 
-		client.SetOnConnectedCallback(onConnected func(connId uint64))
-		client.SetOnClosedCallback(onClosed func(connId uint64))
+		client.SetOnConnectedCallback(onConnected func(connId uint64, endpoint string, connected bool))
+		client.SetOnClosedCallback(onClosed func(connId uint64, endpoint string))
 
 * Config encrypted connection
 	

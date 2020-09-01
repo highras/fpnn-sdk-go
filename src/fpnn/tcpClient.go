@@ -1,15 +1,15 @@
 package fpnn
 
 import (
+	"errors"
 	"log"
+	"runtime"
 	"sync"
 	"time"
-	"errors"
-	"runtime"
 )
 
 const (
-	SDKVersion = "1.0.4"
+	SDKVersion = "1.0.5"
 )
 
 type AnswerCallback interface {
@@ -21,6 +21,9 @@ type QuestProcessor interface {
 	Process(method string) func(*Quest) (*Answer, error)
 }
 
+type tcpClientConnectedCallback func(connId uint64, endpoint string, connected bool)
+type tcpClientCloseCallback func(connId uint64, endpoint string)
+
 type TCPClient struct {
 	mutex			sync.Mutex
 	autoReconnect	bool
@@ -31,8 +34,8 @@ type TCPClient struct {
 	questProcessor	QuestProcessor
 	aesKeyBits		int
 	serverKey		*eccPublicKeyInfo
-	onConnected		func(connId uint64)
-	onClosed		func(connId uint64)
+	onConnected		tcpClientConnectedCallback
+	onClosed		tcpClientCloseCallback
 	logger			*log.Logger
 }
 
@@ -57,6 +60,10 @@ func (client *TCPClient) SetAutoReconnect(autoReconnect bool) {
 	client.autoReconnect = autoReconnect
 }
 
+func (client *TCPClient) GetAutoReconnect() bool {
+	return client.autoReconnect
+}
+
 func (client *TCPClient) SetConnectTimeOut(timeout time.Duration) {
 	client.connectTimeout = timeout
 }
@@ -69,11 +76,11 @@ func (client *TCPClient) SetQuestProcessor(questProcessor QuestProcessor) {
 	client.questProcessor = questProcessor
 }
 
-func (client *TCPClient) SetOnConnectedCallback(onConnected func(connId uint64)) {
+func (client *TCPClient) SetOnConnectedCallback(onConnected tcpClientConnectedCallback) {
 	client.onConnected = onConnected
 }
 
-func (client *TCPClient) SetOnClosedCallback(onClosed func(connId uint64)) {
+func (client *TCPClient) SetOnClosedCallback(onClosed tcpClientCloseCallback) {
 	client.onClosed = onClosed
 }
 
@@ -88,7 +95,7 @@ func (client *TCPClient) SetLogger(logger *log.Logger) {
 			rawPemData	[]byte
 			reinforce	bool
 */
-func (client *TCPClient) EnableEncryptor(rest ... interface{}) (err error) {
+func (client *TCPClient) EnableEncryptor(rest ...interface{}) (err error) {
 
 	reinforce := true
 	var pemPath string
@@ -96,14 +103,14 @@ func (client *TCPClient) EnableEncryptor(rest ... interface{}) (err error) {
 
 	for _, value := range rest {
 		switch value := value.(type) {
-			case bool:
-				reinforce = value
-			case []byte:
-				rawPemData = value
-			case string:
-				pemPath = value
-			default:
-				return errors.New("Invaild params when enable FPNN encryption.")
+		case bool:
+			reinforce = value
+		case []byte:
+			rawPemData = value
+		case string:
+			pemPath = value
+		default:
+			return errors.New("Invaild params when enable FPNN encryption.")
 		}
 	}
 
@@ -114,7 +121,7 @@ func (client *TCPClient) EnableEncryptor(rest ... interface{}) (err error) {
 	} else {
 		return errors.New("Invaild params with FPNN.TCPClient.EnableEncryptor(), both pemPath & rawPemData are empty.")
 	}
-	
+
 	if err != nil {
 		return err
 	}
@@ -199,7 +206,7 @@ func (client *TCPClient) realSendQuest(quest *Quest, cb *connCallback) error {
 	return conn.sendQuest(quest, cb)
 }
 
-func (client *TCPClient) SendQuest(quest *Quest, timeout ... time.Duration) (*Answer, error) {
+func (client *TCPClient) SendQuest(quest *Quest, timeout ...time.Duration) (*Answer, error) {
 
 	if !quest.isTwoWay {
 		err := client.realSendQuest(quest, nil)
@@ -207,7 +214,7 @@ func (client *TCPClient) SendQuest(quest *Quest, timeout ... time.Duration) (*An
 	}
 
 	//------------ send two way quest ---------------//
-	realTimeout := Config.questTimeout
+	realTimeout := client.timeout
 	if len(timeout) == 1 && timeout[0] != 0 {
 		realTimeout = timeout[0]
 	} else if len(timeout) > 1 {
@@ -236,9 +243,9 @@ func (client *TCPClient) SendQuest(quest *Quest, timeout ... time.Duration) (*An
 	return answer, nil
 }
 
-func (client *TCPClient) SendQuestWithCallback(quest *Quest, callback AnswerCallback, timeout ... time.Duration) error {
+func (client *TCPClient) SendQuestWithCallback(quest *Quest, callback AnswerCallback, timeout ...time.Duration) error {
 
-	realTimeout := Config.questTimeout
+	realTimeout := client.timeout
 	if len(timeout) == 1 && timeout[0] != 0 {
 		realTimeout = timeout[0]
 	} else if len(timeout) > 1 {
@@ -257,9 +264,9 @@ func (client *TCPClient) SendQuestWithCallback(quest *Quest, callback AnswerCall
 	return client.realSendQuest(quest, cb)
 }
 
-func (client *TCPClient) SendQuestWithLambda(quest *Quest, callback func(answer *Answer, errorCode int), timeout ... time.Duration) error {
-	
-	realTimeout := Config.questTimeout
+func (client *TCPClient) SendQuestWithLambda(quest *Quest, callback func(answer *Answer, errorCode int), timeout ...time.Duration) error {
+
+	realTimeout := client.timeout
 	if len(timeout) == 1 && timeout[0] != 0 {
 		realTimeout = timeout[0]
 	} else if len(timeout) > 1 {
@@ -284,7 +291,6 @@ func (client *TCPClient) Close() {
 
 	conn := client.conn
 	client.conn = nil
-
 	client.mutex.Unlock()
 
 	if conn != nil {

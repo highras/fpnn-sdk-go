@@ -12,7 +12,7 @@ fpnn 包提供go连接和访问 FPNN 技术生态的能力，可以实现加密�
 
 ## Constants
 
-	const SDKVersion = "1.0.0"
+	const SDKVersion = "1.0.5"
 
 ### FPNN Framework Standard Error Code
 
@@ -149,15 +149,15 @@ endpoint 例子：`endpoint := "localhost:8000"`
 配置 Duplex 模式（Server Push）下，服务器推送消息的请求接口的处理函数的路由函数。  
 具体参考：[QuestProcessor](#type-QuestProcessor)
 
-### func (client *TCPClient) SetOnConnectedCallback(onConnected func(connId uint64))
+### func (client *TCPClient) SetOnConnectedCallback(onConnected func(connId uint64, endpoint string, connected bool))
 
-	func (client *TCPClient) SetOnConnectedCallback(onConnected func(connId uint64))
+	func (client *TCPClient) SetOnConnectedCallback(onConnected func(connId uint64, endpoint string, connected bool))
 
 配置连接建立事件的回调函数。
 
-### func (client *TCPClient) SetOnClosedCallback(onClosed func(connId uint64))
+### func (client *TCPClient) SetOnClosedCallback(onClosed func(connId uint64, endpoint string))
 
-	func (client *TCPClient) SetOnClosedCallback(onClosed func(connId uint64))
+	func (client *TCPClient) SetOnClosedCallback(onClosed func(connId uint64, endpoint string))
 
 配置连接断开事件的回调函数。
 
