@@ -52,6 +52,7 @@ type tcpConnection struct {
 	questProcessor	QuestProcessor
 	activeClosed	bool
 	encryptInfo		*encryptionInfo
+	lastActiveTime  int64
 }
 
 func newTCPConnection(logger *log.Logger, onConnected tcpClientConnectedCallback, onClosed tcpClientCloseCallback,
@@ -77,6 +78,7 @@ func newTCPConnection(logger *log.Logger, onConnected tcpClientConnectedCallback
 
 	conn.questProcessor = questProcessor
 	conn.activeClosed = false
+	conn.lastActiveTime = time.Now().Unix()
 
 	return conn
 }
@@ -86,6 +88,13 @@ func (conn *tcpConnection) isConnected() bool {
 	defer conn.mutex.Unlock()
 
 	return conn.connected
+}
+
+func (conn *tcpConnection) getActiveTime() int64 {
+	conn.mutex.Lock()
+	defer conn.mutex.Unlock()
+
+	return conn.lastActiveTime
 }
 
 func cleanTCPConnection(conn *tcpConnection) {
@@ -124,7 +133,7 @@ func (conn *tcpConnection) realConnect(endpoint string, timeout time.Duration) (
 		conn.logger.Printf("[ERROR] Connect to %s failed, err: %v", endpoint, err)
 		return false
 	}
-
+	conn.lastActiveTime = time.Now().Unix()
 	conn.ticker = time.NewTicker(1 * time.Second)
 
 	go conn.readLoop()
@@ -154,14 +163,6 @@ func (conn *tcpConnection) readRawData(decoder *encryptor) *rawData {
 
 	if _, err := io.ReadFull(conn.conn, buffer.header); err != nil {
 		if err == io.EOF {
-		} else {
-			conn.mutex.Lock()
-			actived := conn.activeClosed
-			conn.mutex.Unlock()
-
-			if !actived {
-				conn.logger.Printf("[ERROR] Read header from connection failed, err: %v", err)
-			}
 		}
 		return nil
 	}
@@ -194,8 +195,6 @@ func (conn *tcpConnection) readRawData(decoder *encryptor) *rawData {
 
 	if _, err := io.ReadFull(conn.conn, buffer.body); err != nil {
 		if err == io.EOF {
-		} else {
-			conn.logger.Printf("[ERROR] Read body from connection failed, err: %v", err)
 		}
 		return nil
 	}
@@ -218,6 +217,9 @@ func (conn *tcpConnection) processRawData(data *rawData) bool {
 			conn.logger.Printf("[ERROR] Decode quest failed, err: %v", err)
 			return false
 		}
+		conn.mutex.Lock()
+		conn.lastActiveTime = time.Now().Unix()
+		conn.mutex.Unlock()
 
 		conn.dealQuest(quest)
 
@@ -232,6 +234,7 @@ func (conn *tcpConnection) processRawData(data *rawData) bool {
 		callback, ok := conn.answerMap[answer.seqNum]
 		if ok {
 			delete(conn.answerMap, answer.seqNum)
+			conn.lastActiveTime = time.Now().Unix()
 			conn.mutex.Unlock()
 
 			go callAnswerCallback(answer, callback)
@@ -522,6 +525,7 @@ func (conn *tcpConnection) sendQuest(quest *Quest, callback *connCallback) error
 	}
 
 	conn.writeChan <- binData
+	conn.lastActiveTime = time.Now().Unix()
 
 	conn.mutex.Unlock()
 
@@ -542,7 +546,7 @@ func (conn *tcpConnection) sendAnswer(answer *Answer) error {
 	}
 
 	conn.writeChan <- binData
-
+	conn.lastActiveTime = time.Now().Unix()
 	conn.mutex.Unlock()
 
 	return nil
@@ -568,7 +572,6 @@ func (conn *tcpConnection) close() {
 		conn.mutex.Unlock()
 		conn.closeSignChan <- true
 		conn.cleanCallbackMap()
-
 		if conn.onClosed != nil {
 			var addr uintptr = uintptr(unsafe.Pointer(conn))
 			go conn.onClosed(uint64(addr), endpoint)

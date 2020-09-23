@@ -12,6 +12,7 @@ type config struct {
 	connectTimeout		time.Duration
 	netChanBufferSize	int
 	maxPayloadSize		int
+	idleTime            int
 }
 
 func (conf *config) SetLogger(logger *log.Logger) {
@@ -34,10 +35,16 @@ func (conf *config) SetMaxPayloadSize(size int) {
 	conf.maxPayloadSize = size
 }
 
+func (conf *config) SetIdleTime(second int) {
+	conf.idleTime = second
+}
+
+
 var Config = &config {
 	log.New(os.Stdout, "[FPNN Go SDK] ", log.LstdFlags),
 	5 * time.Second,
 	5 * time.Second,
 	5,
 	200*1024*1024,
+	50,
 }

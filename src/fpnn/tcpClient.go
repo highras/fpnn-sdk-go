@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	SDKVersion = "1.0.5"
+	SDKVersion = "1.0.6"
 )
 
 type AnswerCallback interface {
@@ -202,7 +202,14 @@ func (client *TCPClient) realSendQuest(quest *Quest, cb *connCallback) error {
 	if conn == nil {
 		return errors.New("Connection is invalid.")
 	}
-
+	active := conn.getActiveTime()
+	if (int)(time.Now().Unix() - active) >= Config.idleTime {
+		client.Close()
+		conn = client.checkConnection()
+		if conn == nil {
+			return errors.New("Connection is invalid.")
+		}
+	}
 	return conn.sendQuest(quest, cb)
 }
 
@@ -286,7 +293,6 @@ func (client *TCPClient) SendQuestWithLambda(quest *Quest, callback func(answer 
 }
 
 func (client *TCPClient) Close() {
-
 	client.mutex.Lock()
 
 	conn := client.conn
