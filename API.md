@@ -12,7 +12,7 @@ fpnn 包提供go连接和访问 FPNN 技术生态的能力，可以实现加密�
 
 ## Constants
 
-	const SDKVersion = "1.0.6"
+	const SDKVersion = "1.0.7"
 
 ### FPNN Framework Standard Error Code
 

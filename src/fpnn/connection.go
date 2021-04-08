@@ -397,6 +397,7 @@ func (conn *tcpConnection) workLoop() {
 
 		case <-conn.ticker.C:
 			go conn.cleanTimeoutedCallback()
+			go conn.checkActiveTime()
 
 		case <-conn.closeSignChan:
 			return
@@ -449,6 +450,15 @@ func (conn *tcpConnection) cleanTimeoutedCallback() {
 
 		answer := newErrorAnswerWitSeqNum(seqNum, FPNN_EC_CORE_TIMEOUT, "Quest is timeout.")
 		go callAnswerCallback(answer, callback)
+	}
+}
+
+func (conn *tcpConnection) checkActiveTime() {
+	conn.mutex.Lock()
+	lastTime := conn.lastActiveTime
+	conn.mutex.Unlock()
+	if (int)(time.Now().Unix()-lastTime) >= Config.idleTime {
+		go conn.close()
 	}
 }
 
