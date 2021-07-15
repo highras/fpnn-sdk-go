@@ -1,22 +1,22 @@
 package fpnn
 
 import (
-	"log"
-	"io"
+	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net"
+	"runtime"
 	"sync"
 	"time"
-	"runtime"
-	"bytes"
-	"errors"
 	"unsafe"
-	"encoding/binary"
 )
 
 type rawData struct {
-	header		[]byte
-	body		[]byte
+	header []byte
+	body   []byte
 }
 
 func newRawData() *rawData {
@@ -26,37 +26,94 @@ func newRawData() *rawData {
 }
 
 type connCallback struct {
-	timeout			int64
-	callback		AnswerCallback
-	callbackFunc 	func(answer *Answer, errorCode int)
+	timeout      int64
+	callback     AnswerCallback
+	callbackFunc func(answer *Answer, errorCode int)
 }
 
 type encryptionInfo struct {
-	aesKeyBits		int
-	secret			[]byte
-	eccPublicKey	[]byte
+	aesKeyBits   int
+	secret       []byte
+	eccPublicKey []byte
+}
+
+////////////////////////////////KeepAliveInfos/////////////////////////////
+type KeepAliveInfos struct {
+	unreceivedThreshold int
+	lastReceivedMs      int64
+	lastPingSendMs      int64
+	KeepAliveParams
+}
+
+func (info *KeepAliveInfos) config(params *KeepAliveParams) {
+	info.pingInterval = params.pingInterval
+	info.pingTimeout = params.pingTimeout
+	info.maxPingRetryCount = params.maxPingRetryCount
+	info.unreceivedThreshold = (int)((int)(info.pingTimeout/time.Millisecond)*info.maxPingRetryCount + (int)(info.pingInterval/time.Millisecond))
+	info.lastReceivedMs = time.Now().UnixNano() / 1e6
+	info.lastPingSendMs = 0
+}
+
+func (info *KeepAliveInfos) updateReceivedMs() {
+	info.lastReceivedMs = time.Now().UnixNano() / 1e6
+}
+
+func (info *KeepAliveInfos) updatePingSentMs() {
+	info.lastPingSendMs = time.Now().UnixNano() / 1e6
+}
+
+func (info *KeepAliveInfos) isRequireSendPing() time.Duration {
+	now := time.Now().UnixNano() / 1e6
+	if (now >= info.lastReceivedMs+(int64)(info.pingInterval/time.Millisecond)) && (now >= info.lastPingSendMs+(int64)(info.pingTimeout/time.Millisecond)) {
+		return info.pingTimeout
+	} else {
+		return 0
+	}
+}
+
+func (info *KeepAliveInfos) isLost() bool {
+	now := time.Now().UnixNano() / 1e6
+	return now > (info.lastReceivedMs + (int64)(info.unreceivedThreshold))
+}
+
+////////////////////////////////KeepAliveCallback/////////////////////////////
+
+type KeepAliveCallback struct {
+	connection *tcpConnection
+}
+
+func (callback *KeepAliveCallback) OnAnswer(answer *Answer) {
+
+}
+
+func (callback *KeepAliveCallback) OnException(answer *Answer, errorCode int) {
+	var errInfo string
+	if answer != nil {
+		errInfo, _ = answer.GetString("ex")
+	}
+	callback.connection.logger.Printf("Keep alive ping for %s failed. errorCode: %d, infos: %s", callback.connection.conn.RemoteAddr(), errorCode, errInfo)
 }
 
 type tcpConnection struct {
-	mutex			sync.Mutex
-	answerMap		map[uint32]*connCallback
-	conn			net.Conn
-	seqNum			uint32
-	closeSignChan	chan bool
-	writeChan		chan []byte
-	ticker			*time.Ticker
-	connected		bool
-	logger			*log.Logger
-	onConnected		tcpClientConnectedCallback
-	onClosed		tcpClientCloseCallback
-	questProcessor	QuestProcessor
-	activeClosed	bool
-	encryptInfo		*encryptionInfo
-	lastActiveTime  int64
+	mutex          sync.Mutex
+	answerMap      map[uint32]*connCallback
+	conn           net.Conn
+	seqNum         uint32
+	closeSignChan  chan bool
+	writeChan      chan []byte
+	ticker         *time.Ticker
+	connected      bool
+	logger         *log.Logger
+	onConnected    tcpClientConnectedCallback
+	onClosed       tcpClientCloseCallback
+	questProcessor QuestProcessor
+	activeClosed   bool
+	encryptInfo    *encryptionInfo
+	keepAliveInfo  *KeepAliveInfos
 }
 
 func newTCPConnection(logger *log.Logger, onConnected tcpClientConnectedCallback, onClosed tcpClientCloseCallback,
-	questProcessor QuestProcessor) *tcpConnection {
+	questProcessor QuestProcessor, keepAliveParams *KeepAliveParams) *tcpConnection {
 
 	conn := new(tcpConnection)
 	conn.answerMap = make(map[uint32]*connCallback)
@@ -78,7 +135,17 @@ func newTCPConnection(logger *log.Logger, onConnected tcpClientConnectedCallback
 
 	conn.questProcessor = questProcessor
 	conn.activeClosed = false
-	conn.lastActiveTime = time.Now().Unix()
+	if keepAliveParams != nil {
+		info := new(KeepAliveInfos)
+		conn.keepAliveInfo = info
+		if keepAliveParams.pingTimeout == 0 {
+			keepAliveParams.pingTimeout = Config.questTimeout
+			conn.keepAliveInfo.config(keepAliveParams)
+			keepAliveParams.pingTimeout = 0
+		} else {
+			conn.keepAliveInfo.config(keepAliveParams)
+		}
+	}
 
 	return conn
 }
@@ -90,15 +157,31 @@ func (conn *tcpConnection) isConnected() bool {
 	return conn.connected
 }
 
-func (conn *tcpConnection) getActiveTime() int64 {
-	conn.mutex.Lock()
-	defer conn.mutex.Unlock()
-
-	return conn.lastActiveTime
-}
-
 func cleanTCPConnection(conn *tcpConnection) {
 	go conn.close()
+}
+
+func (conn *tcpConnection) isRequireKeepAlive() (bool, time.Duration) {
+	isLost := false
+	if conn.keepAliveInfo == nil {
+		return isLost, 0
+	} else {
+		isLost = conn.keepAliveInfo.isLost()
+		if !isLost {
+			return isLost, conn.keepAliveInfo.isRequireSendPing()
+		}
+	}
+	return isLost, 0
+}
+
+func (conn *tcpConnection) updateKeepAliveMs() {
+	conn.keepAliveInfo.updatePingSentMs()
+}
+
+func (conn *tcpConnection) updateReceivedMs() {
+	if conn.keepAliveInfo != nil {
+		conn.keepAliveInfo.updateReceivedMs()
+	}
 }
 
 func (conn *tcpConnection) enableEncryptor(aesBits int, serverKey *eccPublicKeyInfo) bool {
@@ -133,7 +216,6 @@ func (conn *tcpConnection) realConnect(endpoint string, timeout time.Duration) (
 		conn.logger.Printf("[ERROR] Connect to %s failed, err: %v", endpoint, err)
 		return false
 	}
-	conn.lastActiveTime = time.Now().Unix()
 	conn.ticker = time.NewTicker(1 * time.Second)
 
 	go conn.readLoop()
@@ -149,8 +231,7 @@ func (conn *tcpConnection) connect(endpoint string, timeout time.Duration) (ok b
 	ok = conn.realConnect(endpoint, timeout)
 	if conn.onConnected != nil {
 		if ok {
-			var addr uintptr = uintptr(unsafe.Pointer(conn))
-			go conn.onConnected(uint64(addr), endpoint, ok)
+			go conn.onConnected(uint64(uintptr(unsafe.Pointer(conn))), endpoint, ok)
 		} else {
 			go conn.onConnected(0, endpoint, ok)
 		}
@@ -183,11 +264,11 @@ func (conn *tcpConnection) readRawData(decoder *encryptor) *rawData {
 
 	switch buffer.header[6] {
 	case MessageTypeOneWay:
-		buffer.body = make([]byte, payloadSize + uint32(buffer.header[7]))
+		buffer.body = make([]byte, payloadSize+uint32(buffer.header[7]))
 	case MessageTypeTwoWay:
-		buffer.body = make([]byte, payloadSize + 4 + uint32(buffer.header[7]))
+		buffer.body = make([]byte, payloadSize+4+uint32(buffer.header[7]))
 	case MessageTypeAnswer:
-		buffer.body = make([]byte, payloadSize + 4)
+		buffer.body = make([]byte, payloadSize+4)
 	default:
 		conn.logger.Printf("[ERROR] Receive invalid FPNN MType: %d", buffer.header[6])
 		return nil
@@ -217,9 +298,6 @@ func (conn *tcpConnection) processRawData(data *rawData) bool {
 			conn.logger.Printf("[ERROR] Decode quest failed, err: %v", err)
 			return false
 		}
-		conn.mutex.Lock()
-		conn.lastActiveTime = time.Now().Unix()
-		conn.mutex.Unlock()
 
 		conn.dealQuest(quest)
 
@@ -234,7 +312,6 @@ func (conn *tcpConnection) processRawData(data *rawData) bool {
 		callback, ok := conn.answerMap[answer.seqNum]
 		if ok {
 			delete(conn.answerMap, answer.seqNum)
-			conn.lastActiveTime = time.Now().Unix()
 			conn.mutex.Unlock()
 
 			go callAnswerCallback(answer, callback)
@@ -243,6 +320,7 @@ func (conn *tcpConnection) processRawData(data *rawData) bool {
 			conn.logger.Printf("[ERROR] Received invalid answer, seqNum: %d", answer.seqNum)
 		}
 	}
+	conn.updateReceivedMs()
 
 	return true
 }
@@ -397,7 +475,9 @@ func (conn *tcpConnection) workLoop() {
 
 		case <-conn.ticker.C:
 			go conn.cleanTimeoutedCallback()
-			go conn.checkActiveTime()
+			if conn.keepAliveInfo != nil {
+				go conn.checkSendPing()
+			}
 
 		case <-conn.closeSignChan:
 			return
@@ -424,11 +504,28 @@ func (conn *tcpConnection) prepareEncryptedConnection() (*encryptor, error) {
 	}
 }
 
+func (conn *tcpConnection) checkSendPing() {
+	if isLost, timeout := conn.isRequireKeepAlive(); isLost {
+		conn.close()
+	} else if timeout > 0 {
+		cb := &connCallback{}
+		cb.timeout = time.Now().Unix() + int64(timeout/time.Second)
+		callback := &KeepAliveCallback{}
+		callback.connection = conn
+		cb.callback = callback
+		quest := NewQuest("*ping")
+		err := conn.sendQuest(quest, cb)
+		if err != nil {
+			conn.logger.Printf("send keep alive ping return failed, err: %v", err)
+		}
+		conn.updateKeepAliveMs()
+	}
+}
+
 func (conn *tcpConnection) cleanTimeoutedCallback() {
 
 	now := time.Now()
 	curr := now.Unix()
-
 	timeoutedMap := make(map[uint32]*connCallback)
 	{
 		conn.mutex.Lock()
@@ -453,15 +550,6 @@ func (conn *tcpConnection) cleanTimeoutedCallback() {
 	}
 }
 
-func (conn *tcpConnection) checkActiveTime() {
-	conn.mutex.Lock()
-	lastTime := conn.lastActiveTime
-	conn.mutex.Unlock()
-	if (int)(time.Now().Unix()-lastTime) >= Config.idleTime {
-		go conn.close()
-	}
-}
-
 func (conn *tcpConnection) cleanCallbackMap() {
 	conn.mutex.Lock()
 	defer conn.mutex.Unlock()
@@ -481,7 +569,7 @@ func (conn *tcpConnection) prepareECDHQuest() ([]byte, error) {
 	quest.Param("streamMode", true)
 
 	callback := &connCallback{}
-	callback.timeout = time.Now().Unix() + int64(Config.questTimeout / time.Second)
+	callback.timeout = time.Now().Unix() + int64(Config.questTimeout/time.Second)
 	callback.callbackFunc = func(answer *Answer, errorCode int) {
 		if errorCode != FPNN_EC_OK {
 			conn.logger.Printf("[ERROR] Encryption handshake failed, errorCode: %d", errorCode)
@@ -535,8 +623,6 @@ func (conn *tcpConnection) sendQuest(quest *Quest, callback *connCallback) error
 	}
 
 	conn.writeChan <- binData
-	conn.lastActiveTime = time.Now().Unix()
-
 	conn.mutex.Unlock()
 
 	return nil
@@ -556,7 +642,6 @@ func (conn *tcpConnection) sendAnswer(answer *Answer) error {
 	}
 
 	conn.writeChan <- binData
-	conn.lastActiveTime = time.Now().Unix()
 	conn.mutex.Unlock()
 
 	return nil
@@ -583,8 +668,7 @@ func (conn *tcpConnection) close() {
 		conn.closeSignChan <- true
 		conn.cleanCallbackMap()
 		if conn.onClosed != nil {
-			var addr uintptr = uintptr(unsafe.Pointer(conn))
-			go conn.onClosed(uint64(addr), endpoint)
+			go conn.onClosed(uint64(uintptr(unsafe.Pointer(conn))), endpoint)
 		}
 		conn.mutex.Lock()
 	}

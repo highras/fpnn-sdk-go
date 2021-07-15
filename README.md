@@ -41,6 +41,12 @@ e.g. `"localhost:8000"`
 
 		client.SetQuestProcessor(questProcessor QuestProcessor)
 
+* Set client keepAlive
+
+		client.SetKeepAlive(keepAlive bool)
+
+	The default connection is not keepAlive
+
 * Set connection events' callbacks
 
 		client.SetOnConnectedCallback(onConnected func(connId uint64, endpoint string, connected bool))

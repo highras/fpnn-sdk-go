@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	SDKVersion = "1.0.7"
+	SDKVersion = "1.0.8"
 )
 
 type AnswerCallback interface {
@@ -21,33 +21,39 @@ type QuestProcessor interface {
 	Process(method string) func(*Quest) (*Answer, error)
 }
 
+type KeepAliveParams struct {
+	pingTimeout       time.Duration
+	pingInterval      time.Duration
+	maxPingRetryCount int
+}
+
 type tcpClientConnectedCallback func(connId uint64, endpoint string, connected bool)
 type tcpClientCloseCallback func(connId uint64, endpoint string)
 
 type TCPClient struct {
-	mutex			sync.Mutex
-	autoReconnect	bool
-	endpoint		string
-	timeout			time.Duration
-	connectTimeout	time.Duration
-	conn			*tcpConnection
-	questProcessor	QuestProcessor
-	aesKeyBits		int
-	serverKey		*eccPublicKeyInfo
-	onConnected		tcpClientConnectedCallback
-	onClosed		tcpClientCloseCallback
-	logger			*log.Logger
+	mutex           sync.Mutex
+	autoReconnect   bool
+	endpoint        string
+	timeout         time.Duration
+	connectTimeout  time.Duration
+	conn            *tcpConnection
+	questProcessor  QuestProcessor
+	aesKeyBits      int
+	serverKey       *eccPublicKeyInfo
+	onConnected     tcpClientConnectedCallback
+	onClosed        tcpClientCloseCallback
+	logger          *log.Logger
+	keepAliveParams *KeepAliveParams
 }
 
 func NewTCPClient(endpoint string) *TCPClient {
 
 	client := &TCPClient{}
-	
+
 	client.autoReconnect = true
 	client.endpoint = endpoint
 	client.timeout = Config.questTimeout
 	client.connectTimeout = Config.connectTimeout
-
 	runtime.SetFinalizer(client, closeTCPClient)
 	return client
 }
@@ -58,6 +64,35 @@ func closeTCPClient(client *TCPClient) {
 
 func (client *TCPClient) SetAutoReconnect(autoReconnect bool) {
 	client.autoReconnect = autoReconnect
+}
+
+func (client *TCPClient) SetKeepAlive(keepAlive bool) {
+	if keepAlive {
+		client.mutex.Lock()
+		if client.keepAliveParams == nil {
+			param := new(KeepAliveParams)
+			client.keepAliveParams = param
+			client.keepAliveParams.pingInterval = Config.pingInterval
+			client.keepAliveParams.maxPingRetryCount = Config.maxPingRetryCount
+			client.keepAliveParams.pingTimeout = Config.questTimeout
+		}
+		client.mutex.Unlock()
+	}
+}
+
+func (client *TCPClient) SetKeepAliveTimeoutSecond(second time.Duration) {
+	client.SetKeepAlive(true)
+	client.keepAliveParams.pingTimeout = second
+}
+
+func (client *TCPClient) SetKeepAliveIntervalSecond(second time.Duration) {
+	client.SetKeepAlive(true)
+	client.keepAliveParams.pingInterval = second
+}
+
+func (client *TCPClient) SetKeepAliveMaxPingRetryCount(count int) {
+	client.SetKeepAlive(true)
+	client.keepAliveParams.maxPingRetryCount = count
 }
 
 func (client *TCPClient) GetAutoReconnect() bool {
@@ -153,7 +188,7 @@ func (client *TCPClient) Endpoint() string {
 
 func (client *TCPClient) Connect() bool {
 
-	conn := newTCPConnection(client.logger, client.onConnected, client.onClosed, client.questProcessor)
+	conn := newTCPConnection(client.logger, client.onConnected, client.onClosed, client.questProcessor, client.keepAliveParams)
 	if client.serverKey != nil {
 		if ok := conn.enableEncryptor(client.aesKeyBits, client.serverKey); !ok {
 			return ok
@@ -202,14 +237,6 @@ func (client *TCPClient) realSendQuest(quest *Quest, cb *connCallback) error {
 	if conn == nil {
 		return errors.New("Connection is invalid.")
 	}
-	active := conn.getActiveTime()
-	if (int)(time.Now().Unix() - active) >= Config.idleTime {
-		client.Close()
-		conn = client.checkConnection()
-		if conn == nil {
-			return errors.New("Connection is invalid.")
-		}
-	}
 	return conn.sendQuest(quest, cb)
 }
 
@@ -231,10 +258,10 @@ func (client *TCPClient) SendQuest(quest *Quest, timeout ...time.Duration) (*Ans
 	answerChan := make(chan *Answer)
 
 	cb := &connCallback{}
-	cb.timeout = time.Now().Unix() + int64(realTimeout / time.Second)
+	cb.timeout = time.Now().Unix() + int64(realTimeout/time.Second)
 	cb.callbackFunc = func(answer *Answer, errorCode int) {
 		if answer == nil {
-			answer = newErrorAnswerWitSeqNum(quest.seqNum, errorCode, "")	
+			answer = newErrorAnswerWitSeqNum(quest.seqNum, errorCode, "")
 		}
 
 		answerChan <- answer
@@ -245,7 +272,7 @@ func (client *TCPClient) SendQuest(quest *Quest, timeout ...time.Duration) (*Ans
 		return nil, err
 	}
 
-	answer := <- answerChan
+	answer := <-answerChan
 
 	return answer, nil
 }
@@ -263,8 +290,8 @@ func (client *TCPClient) SendQuestWithCallback(quest *Quest, callback AnswerCall
 
 	if quest.isTwoWay {
 		cb = &connCallback{}
-		
-		cb.timeout = time.Now().Unix() + int64(realTimeout / time.Second)
+
+		cb.timeout = time.Now().Unix() + int64(realTimeout/time.Second)
 		cb.callback = callback
 	}
 
@@ -284,8 +311,8 @@ func (client *TCPClient) SendQuestWithLambda(quest *Quest, callback func(answer 
 
 	if quest.isTwoWay {
 		cb = &connCallback{}
-		
-		cb.timeout = time.Now().Unix() + int64(realTimeout / time.Second)
+
+		cb.timeout = time.Now().Unix() + int64(realTimeout/time.Second)
 		cb.callbackFunc = callback
 	}
 

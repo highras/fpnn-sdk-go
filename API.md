@@ -12,7 +12,7 @@ fpnn 包提供go连接和访问 FPNN 技术生态的能力，可以实现加密�
 
 ## Constants
 
-	const SDKVersion = "1.0.7"
+	const SDKVersion = "1.0.8"
 
 ### FPNN Framework Standard Error Code
 
@@ -127,6 +127,34 @@ endpoint 例子：`endpoint := "localhost:8000"`
 
 未配置时，默认行为是**自动重连**。
 
+### func (client *TCPClient) SetKeepAlive(keepAlive bool)
+
+	func (client *TCPClient) SetKeepAlive(keepAlive bool)
+
+设置是否开启连接保活，开启保活后默认10s没有收到数据会发送保活请求，若连续2次保活请求都没有收到响应，将会关闭连接
+
+默认为**连接不保活**
+
+### func (client *TCPClient) SetKeepAliveTimeoutSecond(second time.Duration)
+
+	func (client *TCPClient) SetKeepAliveTimeoutSecond(second time.Duration)
+
+设置保活请求的超时时间，**单位为秒**，设置完后将**开启连接保活**
+未配置时，默认采用 Config 的请求超时参数
+
+### func (client *TCPClient) SetKeepAliveIntervalSecond(second time.Duration)
+
+	func (client *TCPClient) SetKeepAliveIntervalSecond(second time.Duration)
+
+设置多久没有收到数据将发送保活请求的时间间隔，**单位为秒**，设置完后将**开启连接保活**
+未配置时，默认连接保活的间隔为10s
+
+### func (client *TCPClient) SetKeepAliveMaxPingRetryCount(count int)
+
+	func (client *TCPClient) SetKeepAliveMaxPingRetryCount(count int)
+
+设置最大连续保活请求的个数，设置完后将**开启连接保活**
+未配置时，默认最大连续保活请求个数为2，即如果连续2个保活请求没有收到响应，将关闭连接
 
 ### func (client *TCPClient) SetConnectTimeOut(timeout time.Duration)
 

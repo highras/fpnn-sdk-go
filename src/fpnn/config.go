@@ -1,18 +1,19 @@
 package fpnn
 
 import (
-	"os"
 	"log"
+	"os"
 	"time"
 )
 
 type config struct {
-	logger				*log.Logger
-	questTimeout		time.Duration
-	connectTimeout		time.Duration
-	netChanBufferSize	int
-	maxPayloadSize		int
-	idleTime            int
+	logger            *log.Logger
+	questTimeout      time.Duration
+	connectTimeout    time.Duration
+	netChanBufferSize int
+	maxPayloadSize    int
+	pingInterval      time.Duration
+	maxPingRetryCount int
 }
 
 func (conf *config) SetLogger(logger *log.Logger) {
@@ -35,16 +36,12 @@ func (conf *config) SetMaxPayloadSize(size int) {
 	conf.maxPayloadSize = size
 }
 
-func (conf *config) SetIdleTime(second int) {
-	conf.idleTime = second
-}
-
-
-var Config = &config {
-	log.New(os.Stdout, "[FPNN Go SDK] ", log.LstdFlags),
+var Config = &config{
+	log.New(os.Stdout, "[FPNN Go SDK] ", log.LstdFlags|log.Lshortfile),
 	5 * time.Second,
 	5 * time.Second,
 	5,
-	200*1024*1024,
-	50,
+	200 * 1024 * 1024,
+	10 * time.Second,
+	2,
 }
