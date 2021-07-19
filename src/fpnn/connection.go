@@ -91,7 +91,7 @@ func (callback *KeepAliveCallback) OnException(answer *Answer, errorCode int) {
 	if answer != nil {
 		errInfo, _ = answer.GetString("ex")
 	}
-	callback.connection.logger.Printf("Keep alive ping for %s failed. errorCode: %d, infos: %s", callback.connection.conn.RemoteAddr(), errorCode, errInfo)
+	callback.connection.logger.Printf("Keep alive ping for %s failed, local addr: %s. errorCode: %d, infos: %s", callback.connection.conn.RemoteAddr(), callback.connection.conn.LocalAddr(), errorCode, errInfo)
 }
 
 type tcpConnection struct {

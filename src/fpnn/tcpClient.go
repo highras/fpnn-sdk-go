@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	SDKVersion = "1.0.8"
+	SDKVersion = "1.0.9"
 )
 
 type AnswerCallback interface {
