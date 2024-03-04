@@ -35,7 +35,7 @@ e.g. `"localhost:8000"`
 		client.SetAutoReconnect(autoReconnect bool)
 		client.SetConnectTimeOut(timeout time.Duration)
 		client.SetQuestTimeOut(timeout time.Duration)
-		client.SetLogger(logger *log.Logger)
+		client.SetLogger(logger fpnn.Logger)
 
 * Set Duplex Mode (Server Push)
 

@@ -12,7 +12,7 @@ fpnn 包提供go连接和访问 FPNN 技术生态的能力，可以实现加密�
 
 ## Constants
 
-	const SDKVersion = "1.1.0"
+	const SDKVersion = "1.1.1"
 
 ### FPNN Framework Standard Error Code
 
@@ -22,11 +22,12 @@ Please refer: [errorCodes.go](src/fpnn/errorCodes.go)
 
 	var Config
 
-### func (conf *config) SetLogger(logger *log.Logger)
+### func (conf *config) SetLogger(logger *fpnn.Logger)
 
-	func (conf *config) SetLogger(logger *log.Logger)
+	func (conf *config) SetLogger(logger *fpnn.Logger)
 
-配置日志路由。  
+配置日志路由。
+Logger是一个interface，需实现Println(...any)和Printf(string, ...any)两个方法。log.Logger直接作为fpnn.Logger使用。
 如果没有为 [TCPClient][tcpClient] 实例单独配置日志路由，则所有 [TCPClient][tcpClient] 均采用该配置。
 
 

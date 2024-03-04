@@ -2,14 +2,13 @@ package fpnn
 
 import (
 	"errors"
-	"log"
 	"runtime"
 	"sync"
 	"time"
 )
 
 const (
-	SDKVersion = "1.1.0"
+	SDKVersion = "1.1.1"
 )
 
 type AnswerCallback interface {
@@ -42,7 +41,7 @@ type TCPClient struct {
 	serverKey       *eccPublicKeyInfo
 	onConnected     tcpClientConnectedCallback
 	onClosed        tcpClientCloseCallback
-	logger          *log.Logger
+	logger          Logger
 	keepAliveParams *KeepAliveParams
 }
 
@@ -119,16 +118,17 @@ func (client *TCPClient) SetOnClosedCallback(onClosed tcpClientCloseCallback) {
 	client.onClosed = onClosed
 }
 
-func (client *TCPClient) SetLogger(logger *log.Logger) {
+func (client *TCPClient) SetLogger(logger Logger) {
 	client.logger = logger
 }
 
 /*
-	Params:
-		rest: can be include following params:
-			pemPath		string
-			rawPemData	[]byte
-			reinforce	bool
+Params:
+
+	rest: can be include following params:
+		pemPath		string
+		rawPemData	[]byte
+		reinforce	bool
 */
 func (client *TCPClient) EnableEncryptor(rest ...interface{}) (err error) {
 
