@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"runtime"
 	"sync"
@@ -37,7 +36,7 @@ type encryptionInfo struct {
 	eccPublicKey []byte
 }
 
-////////////////////////////////KeepAliveInfos/////////////////////////////
+// //////////////////////////////KeepAliveInfos/////////////////////////////
 type KeepAliveInfos struct {
 	unreceivedThreshold int
 	lastReceivedMs      int64
@@ -103,7 +102,7 @@ type tcpConnection struct {
 	writeChan      chan []byte
 	ticker         *time.Ticker
 	connected      bool
-	logger         *log.Logger
+	logger         Logger
 	onConnected    tcpClientConnectedCallback
 	onClosed       tcpClientCloseCallback
 	questProcessor QuestProcessor
@@ -112,7 +111,7 @@ type tcpConnection struct {
 	keepAliveInfo  *KeepAliveInfos
 }
 
-func newTCPConnection(logger *log.Logger, onConnected tcpClientConnectedCallback, onClosed tcpClientCloseCallback,
+func newTCPConnection(logger Logger, onConnected tcpClientConnectedCallback, onClosed tcpClientCloseCallback,
 	questProcessor QuestProcessor, keepAliveParams *KeepAliveParams) *tcpConnection {
 
 	conn := new(tcpConnection)
